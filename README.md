@@ -313,6 +313,10 @@ The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `
 - [llama.cpp PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) — host prompt cache (8 GiB default)
 - Dave Ebbelaar, "Hybrid Retrieval from Scratch" (2026) — methodology
 
+## auteur
+
+cried-nutty-won with qwen-3.8-max
+
 ## License
 
 [MIT](LICENSE) — consistent with the OpenFox ecosystem.
