@@ -56,7 +56,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         'Search local knowledge base (Obsidian vaults, technical docs, procedures). ' +
         'Use when the user asks about their notes, documentation, or when you need ' +
-        'to verify a technical reference before coding.',
+        'to verify a technical reference before coding. ' +
+        'Supports 0.6B models (CPU, ~1 GB RAM) and 4B models (GPU, ~6 GB VRAM) for higher quality.',
       inputSchema: {
         type: 'object',
         properties: {

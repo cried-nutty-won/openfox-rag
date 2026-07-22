@@ -33,7 +33,7 @@ OpenFox Agent
               └──→ Tool rag_search      (visible by the agent)
 ```
 
-**Zero additional model processes.** Embedding and reranker are served by the same backend as the chat LLM. The MCP server handles RAG logic (BM25, RRF, cache) in Node.js and calls the existing backend's endpoints.
+**Zero additional processes.** Embedding and reranker are served by the same backend as the chat LLM. The MCP server handles RAG logic (BM25, RRF, cache) in Node.js and calls the existing backend's endpoints.
 
 ## Installation
 
@@ -45,10 +45,22 @@ OpenFox Agent
   - **llamacpp**: `--models-preset models.ini` (see [`presets/models-llamacpp.ini`](presets/models-llamacpp.ini))
   - **vLLM**: `--task embedding` + `--task score`
   - **sglang**: native embedding support
-- GGUF models:
-  - Embedding: [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) (official)
-  - Reranker: [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) (**mandatory** — community GGUFs are broken, see [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
+- GGUF models (choose based on your hardware):
 
+  | Model | Quant | Size | Hardware | MTEB |
+  |-------|-------|------|----------|------|
+  | Qwen3-Embedding-0.6B | Q8_0 | 610 MB | CPU or GPU | 64.33 |
+  | Qwen3-Embedding-4B | Q4_K_M | 2.4 GB | GPU recommended | 69.45 |
+  | Qwen3-Reranker-0.6B | Q4_K_M | 379 MB | CPU or GPU | 65.80 |
+  | Qwen3-Reranker-4B | Q4_K_M | 2.4 GB | GPU  | 69.76 |
+
+  - as you can see in the MTEB score tests, the difference is not that big between 0.6B and 4B models
+  - for GPU users Qwen3-Embedding-4B with Qwen3-Reranker-0.6B is probably the sweet spot for most users as the latency due to reranking is the most perceived.
+  - 8B models are insignificant and though not recommanded
+  
+  - Embedding: [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) or [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) (official)
+  - Reranker: [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) or [Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp) (**mandatory** — community GGUFs are broken, see [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
+  
 ### 2. Install the MCP server
 
 ```bash
@@ -76,7 +88,7 @@ Settings > Tools > MCP:
         "RAG_ENABLE_RERANKER": "true",
         "RAG_ALPHA_RATIO": "0.36",
         "RAG_CACHE_DIR": "~/.config/openfox/rag-cache/",
-        "RAG_VAULTS": "void:/path/to/obsidian/001 Void 000,linux:/path/to/obsidian/000 linux 000"
+        "RAG_VAULTS": "void:/path/to/obsidian/001 Void 000,linux:/path/to/obsidian/000 linux 000,llm:/path/to/obsidian/004 llm 000"
       }
     }
   }
@@ -85,7 +97,41 @@ Settings > Tools > MCP:
 
 The agent can also configure it autonomously: *"set up the RAG MCP"* — same pattern as Brave Search.
 
-### 4. Restart OpenFox
+### 4. Configuration reference
+
+| Setting | Env var | Default | Description |
+|---------|---------|---------|-------------|
+| Enable RAG | *(remove MCP entry to disable)* | — | Toggle the `rag_search` tool on/off |
+| Backend URL | `RAG_BACKEND_URL` | `http://localhost:8000` | LLM backend URL (vLLM/llamacpp/sglang) |
+| Embedding model | `RAG_EMBEDDING_MODEL` | `Qwen3-Embedding-0.6B` | Model name in the backend |
+| Reranker model | `RAG_RERANKER_MODEL` | `Qwen3-Reranker-0.6B` | Model name in the backend |
+| Default vault | `RAG_DEFAULT_VAULT` | `obsidian` | Default vault for searches |
+| Top K | `RAG_TOP_K` | `5` | Number of results |
+| Rerank candidates | `RAG_RERANK_CANDIDATES` | `18` | Candidates sent to the reranker |
+| Enable reranker | `RAG_ENABLE_RERANKER` | `true` | Enable cross-encoder reranking |
+| Alpha ratio | `RAG_ALPHA_RATIO` | `0.36` | Chunk filter threshold |
+| Cache directory | `RAG_CACHE_DIR` | `~/.config/openfox/rag-cache/` | Embedding cache location |
+| Vaults | `RAG_VAULTS` | *(empty)* | Comma-separated `name:/path` pairs |
+
+### 5. Add vaults
+
+Vaults are configured via the `RAG_VAULTS` environment variable:
+
+```
+RAG_VAULTS=void:/path/to/obsidian/001 Void 000,linux:/path/to/obsidian/000 linux 000,llm:/path/to/obsidian/004 llm 000
+```
+
+| Name | Path |
+|------|------|
+| void | `/path/to/obsidian/001 Void 000` |
+| linux | `/path/to/obsidian/000 linux 000` |
+| llm | `/path/to/obsidian/004 llm 000` |
+
+Special vault scopes:
+- `obsidian`: all configured Obsidian vaults
+- `all`: all vaults (Obsidian + external)
+
+### 6. Restart OpenFox
 
 The `rag_search` tool appears automatically in the agent's tool list.
 
@@ -93,7 +139,9 @@ The `rag_search` tool appears automatically in the agent's tool list.
 
 ### llamacpp (models.ini)
 
-One server, one port, three models. The router swaps models in/out of VRAM on demand:
+One server, one port, three models. The router swaps models in/out of VRAM on demand.
+
+#### 0.6B models (CPU-friendly, ~1 GB total)
 
 ```ini
 [*]
@@ -120,6 +168,33 @@ model = /path/to/DeepSeek-V4-Flash.gguf
 ctx-size = 32768
 ```
 
+#### 4B models (GPU recommended, ~5 GB total)
+
+```ini
+[*]
+n-gpu-layers = all
+batch-size = 2048
+ubatch-size = 2048
+load-on-startup = Qwen3-Embedding-4B
+
+[Qwen3-Embedding-4B]
+model = /path/to/Qwen3-Embedding-4B-Q4_K_M.gguf
+embedding = true
+pooling = last
+ctx-size = 32768
+
+[Qwen3-Reranker-4B]
+model = /path/to/Qwen3-Reranker-4B-Q4_K_M.gguf
+reranking = true
+pooling = rank
+embedding = true
+ctx-size = 32768
+
+[deepseek-v4-flash]
+model = /path/to/DeepSeek-V4-Flash.gguf
+ctx-size = 32768
+```
+
 ```bash
 llama-server --host 127.0.0.1 --port 8000 --models-max 1 --models-preset models.ini
 ```
@@ -128,6 +203,8 @@ llama-server --host 127.0.0.1 --port 8000 --models-max 1 --models-preset models.
 
 ### vLLM (GPU cluster)
 
+#### 0.6B models
+
 ```bash
 vllm serve Qwen/Qwen3-Embedding-0.6B \
   --served-model-name Qwen3-Embedding-0.6B \
@@ -135,6 +212,18 @@ vllm serve Qwen/Qwen3-Embedding-0.6B \
 
 vllm serve Qwen/Qwen3-Reranker-0.6B \
   --served-model-name Qwen3-Reranker-0.6B \
+  --task score --port 8001 &
+```
+
+#### 4B models
+
+```bash
+vllm serve Qwen/Qwen3-Embedding-4B \
+  --served-model-name Qwen3-Embedding-4B \
+  --task embedding --port 8000 &
+
+vllm serve Qwen/Qwen3-Reranker-4B \
+  --served-model-name Qwen3-Reranker-4B \
   --task score --port 8001 &
 ```
 
@@ -182,25 +271,33 @@ to verify procedures, configurations, and technical references.
 
 ## Standalone RAG Server (Alternative)
 
-If you prefer a separate Python RAG server instead of the integrated MCP server:
+If you prefer a separate Python RAG server (BM25 + vector + RRF + reranker) instead of the integrated MCP server:
 
 **[rag-system](https://github.com/cried-nutty-won/rag-system)** — full reference implementation with documentation.
 
-The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `http://127.0.0.1:8182`.
+The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `http://127.0.0.1:8182`. In this mode, the MCP server forwards all search requests to the Python RAG server, which handles embedding, BM25, RRF, and reranking internally.
 
 ## Performance
 
-| Metric | RRF only | With Reranker |
-|--------|----------|---------------|
-| Latency (CPU) | ~20 ms | ~10-18 s (18 candidates) |
-| Latency (GPU) | ~3 ms | ~1 s (100 candidates) |
-| RAM (full stack) | ~1.7 GB | ~1.7 GB |
-| Accuracy (NDCG@10) | baseline | +12 pts |
+| Metric | RRF only | With Reranker (0.6B) | With Reranker (4B) |
+|--------|----------|---------------------|-------------------|
+| Latency (CPU) | ~20 ms | ~10-18 s (18 candidates) | ~30-40 s (too slow) |
+| Latency (GPU) | ~3 ms | ~1 s (100 candidates) | ~3 s (100 candidates) |
+| RAM / VRAM | ~1.7 GB | ~1.7 GB | ~6 GB |
+| Accuracy (NDCG@10) | baseline | +12 pts | +16 pts |
+
+### Model selection guide
+
+| Hardware | Embedding | Reranker | Why |
+|----------|-----------|----------|-----|
+| CPU only (8 GB RAM) | 0.6B Q8_0 | 0.6B Q4_K_M | Fits in RAM, interactive latency |
+| GPU (6+ GB VRAM) | 4B Q4_K_M | 4B Q4_K_M | Best quality, ~3s for 100 candidates |
+| GPU (24+ GB VRAM) | 4B F16 | 4B F16 | Maximum quality, no quantization loss |
 
 ## Known Limitations
 
 - **Reranker GGUF**: Only [Voodisss GGUFs](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) work. Community conversions are broken (missing `cls.output.weight` tensor). See [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407).
-- **Host prompt cache**: llama.cpp PR #16391 defaults to 8 GiB host prompt cache. For embedding/reranker servers where prompts are never reused, add `--cache-ram 0` to prevent OOM.
+- **Host prompt cache**: llama.cpp [PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) defaults to 8 GiB host prompt cache. For embedding/reranker servers where prompts are never reused, add `--cache-ram 0` to prevent OOM.
 - **Reranker candidates > 21 on CPU**: The reranker crashes. 18 is the stable sweet spot.
 - **No hot-reload**: Modifying an Obsidian file requires cache clear + re-index.
 - **Orphan cache**: Deleted chunks remain in the JSON cache (no garbage collection yet).
@@ -213,7 +310,7 @@ The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `
 - [Voodisss multi-model guide](https://gist.github.com/VooDisss/42bce4eb5c76d3c325633886c5e348ee) — llamacpp models.ini reference
 - [Voodisss Reranker GGUF](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) — working GGUF conversions
 - [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407) — why community reranker GGUFs are broken
-- [llama.cpp PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) — host prompt cache
+- [llama.cpp PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) — host prompt cache (8 GiB default)
 - Dave Ebbelaar, "Hybrid Retrieval from Scratch" (2026) — methodology
 
 ## License
