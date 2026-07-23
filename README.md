@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-MCP server for [OpenFox](https://github.com/openfox/openfox). Exposes a `rag_search` tool to the OpenFox agent via the [Model Context Protocol](https://modelcontextprotocol.io), enabling it to search local knowledge bases (Obsidian vaults, technical docs, procedures) through a hybrid retrieval pipeline: **BM25 + Vector → RRF → Cross-encoder Reranker**.
+RAG integration for [OpenFox](https://github.com/openfox/openfox). A skill file that teaches the OpenFox agent to search local knowledge bases (Obsidian vaults, technical docs, procedures) through a hybrid retrieval pipeline: **BM25 + Vector → RRF → Cross-encoder Reranker**.
 
-Configured in OpenFox via **Settings > Tools > MCP** — exactly like Brave Search. Zero modification to OpenFox core.
+No MCP, no plugin, no additional process. The RAG server runs independently ([rag-system](https://github.com/cried-nutty-won/rag-system)), and the agent controls it entirely via its built-in terminal using 10 fish shortcuts.
 
 ## Why
 
@@ -15,127 +15,129 @@ Configured in OpenFox via **Settings > Tools > MCP** — exactly like Brave Sear
 | Maximum compute per query | Compute proportional to actual relevance |
 | Often depends on cloud APIs | 100% local, no data leaves the machine |
 
-## Architecture
+## How it works
 
 ```
 OpenFox Agent
     │
-    ├──→ LLM Backend (vLLM / llamacpp / sglang)
-    │         ├──→ Chat model (DeepSeek, Qwen3, etc.)
-    │         ├──→ Qwen3-Embedding-0.6B  ← same backend
-    │         └──→ Qwen3-Reranker-0.6B   ← same backend
+    ├──→ Built-in terminal
+    │         │
+    │         ├──→ rc          (health check)
+    │         ├──→ llmers      (start full stack)
+    │         ├──→ ragr void "query"   (search with reranker)
+    │         ├──→ rag void "query"    (search RRF only)
+    │         ├──→ rst         (tail logs)
+    │         └──→ rsk         (stop server)
     │
-    └──→ openfox-rag MCP server (this repo)
-              ├──→ POST /v1/embeddings  (same backend)
-              ├──→ POST /v1/rerank      (same backend)
-              ├──→ BM25 + RRF           (local, inside the MCP server)
-              ├──→ Embedding cache      (~/.config/openfox/rag-cache/)
-              └──→ Tool rag_search      (visible by the agent)
+    └──→ Skill file (skills/rag-search.md)
+              └──→ Tells the agent when and how to use each command
 ```
 
-**Zero additional processes.** Embedding and reranker are served by the same backend as the chat LLM. The MCP server handles RAG logic (BM25, RRF, cache) in Node.js and calls the existing backend's endpoints.
+**Zero additional processes on the OpenFox side.** The RAG server is a separate, independent service. The agent starts it, searches it, monitors it, and stops it — all from the terminal, exactly like any other command-line tool.
+
+## Commands
+
+| Command | Action |
+|---------|--------|
+| `llmers` | Start full stack (embedding + reranker + RAG server) |
+| `llmes` | Start embedding + RAG server (no reranker) |
+| `llme` | Start embedding only (port 8181) |
+| `llmr` | Start reranker only (port 8184) |
+| `rs` | Start Python RAG server only (port 8182) |
+| `rst` | Tail -f RAG server logs |
+| `rag <vault> "<query>"` | Search with RRF only (fast, ~20ms) |
+| `ragr <vault> "<query>"` | Search with RRF + reranker (precise, ~10-18s) |
+| `rc` | Health check all 3 services |
+| `rsk` | Kill the Python RAG server |
+
+## Vaults
+
+`void` · `linux` · `browsing` · `terminal` · `llm` · `images` · `telephone` · `obsidian` · `all`
+
+- `obsidian`: all Obsidian vaults
+- `all`: all vaults (Obsidian + external)
 
 ## Installation
 
-### 1. Prerequisites
+### 1. Install the RAG server
 
-- OpenFox installed (`npm i -g openfox`)
-- Node.js >= 24
-- LLM backend with embedding + reranking support:
-  - **llamacpp**: `--models-preset models.ini` (see [`presets/models-llamacpp.ini`](presets/models-llamacpp.ini))
-  - **vLLM**: `--task embedding` + `--task score`
-  - **sglang**: native embedding support
-- GGUF models (choose based on your hardware):
-
-  | Model | Quant | Size | Hardware | MTEB |
-  |-------|-------|------|----------|------|
-  | Qwen3-Embedding-0.6B | Q8_0 | 610 MB | CPU or GPU | 64.33 |
-  | Qwen3-Embedding-4B | Q4_K_M | 2.4 GB | GPU recommended | 69.45 |
-  | Qwen3-Reranker-0.6B | Q4_K_M | 379 MB | CPU or GPU | 65.80 |
-  | Qwen3-Reranker-4B | Q4_K_M | 2.4 GB | GPU  | 69.76 |
-
-  - as you can see in the MTEB score tests, the difference is not that big between 0.6B and 4B models
-  - for GPU users Qwen3-Embedding-4B with Qwen3-Reranker-0.6B is probably the sweet spot for most users as the latency due to reranking is the most perceived.
-  - 8B models are insignificant and though not recommanded
-  
-  - Embedding: [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) or [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) (official)
-  - Reranker: [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) or [Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp) (**mandatory** — community GGUFs are broken, see [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
-  
-### 2. Install the MCP server
+See [rag-system](https://github.com/cried-nutty-won/rag-system) for full installation instructions.
 
 ```bash
-cd /path/to/openfox-rag
-npm install
+git clone https://github.com/cried-nutty-won/rag-system.git
+cd rag-system
+cp config.sh.example config.sh
+# Edit config.sh with your paths
 ```
 
-### 3. Configure in OpenFox
+### 2. Add the skill to OpenFox
 
-Settings > Tools > MCP:
+**Option A: General Instructions (simplest)**
 
-```json
-{
-  "mcpServers": {
-    "rag": {
-      "command": "node",
-      "args": ["/path/to/openfox-rag/mcp/server.js"],
-      "env": {
-        "RAG_BACKEND_URL": "http://localhost:8000",
-        "RAG_EMBEDDING_MODEL": "Qwen3-Embedding-0.6B",
-        "RAG_RERANKER_MODEL": "Qwen3-Reranker-0.6B",
-        "RAG_DEFAULT_VAULT": "obsidian",
-        "RAG_TOP_K": "5",
-        "RAG_RERANK_CANDIDATES": "18",
-        "RAG_ENABLE_RERANKER": "true",
-        "RAG_ALPHA_RATIO": "0.36",
-        "RAG_CACHE_DIR": "~/.config/openfox/rag-cache/",
-        "RAG_VAULTS": "void:/path/to/obsidian/001 Void 000,linux:/path/to/obsidian/000 linux 000,llm:/path/to/obsidian/004 llm 000"
-      }
-    }
-  }
-}
-```
-
-The agent can also configure it autonomously: *"set up the RAG MCP"* — same pattern as Brave Search.
-
-### 4. Configuration reference
-
-| Setting | Env var | Default | Description |
-|---------|---------|---------|-------------|
-| Enable RAG | *(remove MCP entry to disable)* | — | Toggle the `rag_search` tool on/off |
-| Backend URL | `RAG_BACKEND_URL` | `http://localhost:8000` | LLM backend URL (vLLM/llamacpp/sglang) |
-| Embedding model | `RAG_EMBEDDING_MODEL` | `Qwen3-Embedding-0.6B` | Model name in the backend |
-| Reranker model | `RAG_RERANKER_MODEL` | `Qwen3-Reranker-0.6B` | Model name in the backend |
-| Default vault | `RAG_DEFAULT_VAULT` | `obsidian` | Default vault for searches |
-| Top K | `RAG_TOP_K` | `5` | Number of results |
-| Rerank candidates | `RAG_RERANK_CANDIDATES` | `18` | Candidates sent to the reranker |
-| Enable reranker | `RAG_ENABLE_RERANKER` | `true` | Enable cross-encoder reranking |
-| Alpha ratio | `RAG_ALPHA_RATIO` | `0.36` | Chunk filter threshold |
-| Cache directory | `RAG_CACHE_DIR` | `~/.config/openfox/rag-cache/` | Embedding cache location |
-| Vaults | `RAG_VAULTS` | *(empty)* | Comma-separated `name:/path` pairs |
-
-### 5. Add vaults
-
-Vaults are configured via the `RAG_VAULTS` environment variable:
+In OpenFox, go to Settings > General Instructions and add:
 
 ```
-RAG_VAULTS=void:/path/to/obsidian/001 Void 000,linux:/path/to/obsidian/000 linux 000,llm:/path/to/obsidian/004 llm 000
+You have access to a local RAG system. Use these commands in the terminal:
+
+| Command | Action |
+|---------|--------|
+| llmers | Start full stack (embedding + reranker + RAG) |
+| llmes | Start embedding + RAG (no reranker) |
+| llme | Start embedding only |
+| llmr | Start reranker only |
+| rs | Start RAG server only |
+| rst | Tail -f RAG logs |
+| rag <vault> "<query>" | Search RRF only (fast) |
+| ragr <vault> "<query>" | Search RRF + reranker (precise) |
+| rc | Health check all services |
+| rsk | Kill RAG server |
+
+Before coding, always check the knowledge base:
+rc
+ragr obsidian "your query"
 ```
 
-| Name | Path |
-|------|------|
-| void | `/path/to/obsidian/001 Void 000` |
-| linux | `/path/to/obsidian/000 linux 000` |
-| llm | `/path/to/obsidian/004 llm 000` |
+**Option B: Skill file**
 
-Special vault scopes:
-- `obsidian`: all configured Obsidian vaults
-- `all`: all vaults (Obsidian + external)
+```bash
+cp skills/rag-search.md ~/.config/openfox/skills/
+```
 
-### 6. Restart OpenFox
+Then in OpenFox, go to Settings > Skills and point to the directory.
 
-The `rag_search` tool appears automatically in the agent's tool list.
+**Option C: AGENTS.md (per project)**
+
+Add the command table and search instructions to your project's `AGENTS.md` file.
+
+### 3. No prerequisites needed
+
+The agent controls the entire RAG stack autonomously via the terminal.
+It checks health (`rc`), starts the stack (`llmers`), searches (`rag`/`ragr`),
+monitors logs (`rst`), and stops services (`rsk`) — all by itself.
 
 ## Backend Configuration
+
+The embedding and reranker models can be served by the same backend as the chat LLM, or by separate llama-server instances. See [`presets/models-llamacpp.ini`](presets/models-llamacpp.ini) for a ready-to-use configuration.
+
+### Model selection
+
+| Hardware | Embedding | Reranker | Why |
+|----------|-----------|----------|-----|
+| CPU only (8 GB RAM) | 0.6B Q8_0 | 0.6B Q4_K_M | Fits in RAM, interactive latency |
+| GPU (6+ GB VRAM) | 4B Q4_K_M | 4B Q4_K_M | Best quality, ~3s for 100 candidates |
+| GPU (24+ GB VRAM) | 4B F16 | 4B F16 | Maximum quality, no quantization loss |
+
+### GGUF models
+
+| Model | Quant | Size | Hardware | MTEB |
+|-------|-------|------|----------|------|
+| Qwen3-Embedding-0.6B | Q8_0 | 610 MB | CPU or GPU | 64.33 |
+| Qwen3-Embedding-4B | Q4_K_M | 2.4 GB | GPU recommended | 69.45 |
+| Qwen3-Reranker-0.6B | Q4_K_M | 379 MB | CPU or GPU | 65.80 |
+| Qwen3-Reranker-4B | Q4_K_M | 2.4 GB | GPU recommended | 69.76 |
+
+- Embedding: [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) or [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) (official)
+- Reranker: [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) or [Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp) (**mandatory** — community GGUFs are broken, see [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
 
 ### llamacpp (models.ini)
 
@@ -235,21 +237,6 @@ python -m sglang.launch_server \
   --is-embedding --port 8000 &
 ```
 
-## Tool Exposed to the Agent
-
-```json
-{
-  "name": "rag_search",
-  "description": "Search local knowledge base (Obsidian vaults, technical docs, procedures). Use when the user asks about their notes, documentation, or when you need to verify a technical reference before coding.",
-  "parameters": {
-    "query": "string — natural language search query",
-    "vault": "string — obsidian | all | void | linux | llm | terminal",
-    "top_k": "integer — number of results (default: 5)",
-    "rerank": "boolean — enable reranker (default: true)"
-  }
-}
-```
-
 ## Workflow Integration
 
 ### Custom workflow step
@@ -265,17 +252,11 @@ Add a "Research" step before "Build" in OpenFox's workflow editor:
 Add to your OpenFox General Instructions:
 
 ```
-Before coding, always consult the local knowledge base via rag_search
-to verify procedures, configurations, and technical references.
+Before coding, always consult the local knowledge base via the terminal.
+Run: rc
+Then: ragr obsidian "your query"
+Use the retrieved passages as context. Always cite the source file.
 ```
-
-## Standalone RAG Server (Alternative)
-
-If you prefer a separate Python RAG server (BM25 + vector + RRF + reranker) instead of the integrated MCP server:
-
-**[rag-system](https://github.com/cried-nutty-won/rag-system)** — full reference implementation with documentation.
-
-The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `http://127.0.0.1:8182`. In this mode, the MCP server forwards all search requests to the Python RAG server, which handles embedding, BM25, RRF, and reranking internally.
 
 ## Performance
 
@@ -286,14 +267,6 @@ The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `
 | RAM / VRAM | ~1.7 GB | ~1.7 GB | ~6 GB |
 | Accuracy (NDCG@10) | baseline | +12 pts | +16 pts |
 
-### Model selection guide
-
-| Hardware | Embedding | Reranker | Why |
-|----------|-----------|----------|-----|
-| CPU only (8 GB RAM) | 0.6B Q8_0 | 0.6B Q4_K_M | Fits in RAM, interactive latency |
-| GPU (6+ GB VRAM) | 4B Q4_K_M | 4B Q4_K_M | Best quality, ~3s for 100 candidates |
-| GPU (24+ GB VRAM) | 4B F16 | 4B F16 | Maximum quality, no quantization loss |
-
 ## Known Limitations
 
 - **Reranker GGUF**: Only [Voodisss GGUFs](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) work. Community conversions are broken (missing `cls.output.weight` tensor). See [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407).
@@ -301,21 +274,18 @@ The MCP server can also run in **proxy mode** by pointing `RAG_BACKEND_URL` to `
 - **Reranker candidates > 21 on CPU**: The reranker crashes. 18 is the stable sweet spot.
 - **No hot-reload**: Modifying an Obsidian file requires cache clear + re-index.
 - **Orphan cache**: Deleted chunks remain in the JSON cache (no garbage collection yet).
+- **Agent must parse output**: The agent reads the command output and extracts relevant passages. Works well with models ≥ 7B.
 
 ## References
 
 - [OpenFox](https://github.com/openfox/openfox) — local-LLM-first agentic coding assistant
-- [rag-system](https://github.com/cried-nutty-won/rag-system) — standalone RAG reference implementation (Python)
+- [rag-system](https://github.com/cried-nutty-won/rag-system) — standalone RAG server (Python)
 - [Qwen3 Embedding blog](https://qwenlm.github.io/blog/qwen3-embedding/) — official documentation
 - [Voodisss multi-model guide](https://gist.github.com/VooDisss/42bce4eb5c76d3c325633886c5e348ee) — llamacpp models.ini reference
 - [Voodisss Reranker GGUF](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) — working GGUF conversions
 - [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407) — why community reranker GGUFs are broken
 - [llama.cpp PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) — host prompt cache (8 GiB default)
 - Dave Ebbelaar, "Hybrid Retrieval from Scratch" (2026) — methodology
-
-## auteur
-
-cried-nutty-won with qwen-3.8-max
 
 ## License
 
