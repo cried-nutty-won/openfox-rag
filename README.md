@@ -309,7 +309,7 @@ Use the retrieved passages as context. Always cite the source file.
 Void Linux with niri desktop.
 Faster boot, 1GB RAM occupied only, fastest and whole package manager.
 System.d free, runit instead wich is faster, lighter and private. 
-Perfect balance between security and fluidity
+Perfect balance between security and fluidity.
 
 ## License
 
