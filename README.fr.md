@@ -311,7 +311,7 @@ Utilise les passages retournés comme contexte. Cite toujours le fichier source.
 Void Linux avec niri desktop.
 Faster boot, occupe seulement 1Go RAM, gestionnaire de packages rapide et complet.
 Pas de system.d mais runit qui est plus léger, rapide et confidentiel. 
-Excellent équilibre entre sécurité et fluidité
+Excellent équilibre entre sécurité et fluidité.
 
 ## Licence
 
