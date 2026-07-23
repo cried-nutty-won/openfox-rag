@@ -35,6 +35,8 @@ Agent OpenFox
 
 **Zéro processus supplémentaire côté OpenFox.** Le serveur RAG est un service séparé et indépendant. L'agent le démarre, le consulte, le surveille et l'arrête — tout depuis le terminal, exactement comme n'importe quel outil en ligne de commande.
 
+---
+
 ## Installation
 
 ```bash
@@ -62,6 +64,8 @@ Tester sans rien modifier :
 bash install.sh --dry-run
 ```
 
+---
+
 ## Commandes
 
 | Commande | Action |
@@ -88,6 +92,8 @@ ragr all "ta requête"                      # recherche dans tous les vaults
 rag obsidian "ta requête"                  # recherche dans tous les vaults Obsidian
 ```
 
+---
+
 ## Sélection des modèles
 
 | Matériel | Embedding | Reranker | Pourquoi |
@@ -107,6 +113,8 @@ rag obsidian "ta requête"                  # recherche dans tous les vaults Obs
 
 - Embedding : [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) ou [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) (officiel)
 - Reranker : [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) ou [Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp) (**obligatoire** — les GGUF communautaires sont cassés, voir [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
+
+---
 
 **MTEB** est le benchmark de référence pour évaluer la qualité des modèles d'embedding. Il mesure la capacité d'un modèle à produire des vecteurs qui capturent le sens du texte, à travers **8 types de tâches** :
 
@@ -132,6 +140,8 @@ Le score MTEB **Retrieval** est le plus important pour le RAG : il mesure direct
 | Qwen3-Embedding-8B | 70.58 | 70.88 | 4096 |
 
 Le 0.6B est suffisant pour un RAG local avec reranker. Le 4B apporte +5 points mais nécessite un GPU.
+
+---
 
 ## Configuration du backend
 
