@@ -1,4 +1,4 @@
-# openfox-rag
+# openfox-rag   [(en)](README.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -297,7 +297,7 @@ Utilise les passages retournés comme contexte. Cite toujours le fichier source.
 
 ## Références
 
-- [OpenFox](https://github.com/openfox/openfox) — harnais LLM local
+- [OpenFox](https://github.com/openfox/openfox) — harnais LLM local (pour agents IA)
 - [rag-system](https://github.com/cried-nutty-won/rag-system) — serveur RAG standalone (Python)
 - [Blog Qwen3 Embedding](https://qwenlm.github.io/blog/qwen3-embedding/) — documentation officielle
 - [Guide Voodisss multi-modèles](https://gist.github.com/VooDisss/42bce4eb5c76d3c325633886c5e348ee) — référence models.ini llamacpp
