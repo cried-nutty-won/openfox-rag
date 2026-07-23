@@ -5,7 +5,7 @@
 Intégration RAG pour [OpenFox](https://github.com/openfox/openfox). Un fichier skill qui permet à l'agent OpenFox avec un mini llm spécialisé en recherche documentaire de 0,6B
 et un second mini llm de 0,6B spécialisé en classement, de chercher efficacement
 dans la documentation locale: coffres Obsidian, docs techniques, manuels, procédures...
-et ainsi gagner en tokens, en vitesse, en écomomie d'énergie, en qualité et en précision.de rechercher dans une base de connaissances locale (vaults Obsidian, documentation technique, procédures) via un pipeline de retrieval hybride : **BM25 + Vectoriel → RRF → Reranker cross-encoder**.
+et ainsi gagner en tokens, en vitesse, en écomomie d'énergie, en qualité et en précision via un pipeline de retrieval hybride : **BM25 + Vectoriel → RRF → Reranker cross-encoder**.
 
 Pas de MCP, pas de plugin, pas de processus supplémentaire. Le serveur RAG tourne indépendamment ([rag-system](https://github.com/cried-nutty-won/rag-system)), et l'agent le contrôle entièrement via son terminal intégré avec 10 raccourcis shell.
 
