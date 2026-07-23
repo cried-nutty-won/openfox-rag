@@ -20,6 +20,33 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 header()  { echo -e "\n${BOLD}${CYAN}━━━ $* ━━━${NC}\n"; }
 
+# ── Dry-run mode ────────────────────────────────────────────
+DRY_RUN=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|-n)
+            DRY_RUN=true
+            ;;
+    esac
+done
+
+run() {
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "  ${YELLOW}[DRY-RUN]${NC} $*"
+    else
+        "$@"
+    fi
+}
+
+run_write() {
+    local file="$1"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "  ${YELLOW}[DRY-RUN]${NC} Would write to: ${file}"
+    else
+        cat > "$file"
+    fi
+}
+
 # ── Helpers ─────────────────────────────────────────────────
 ask() {
     local prompt="$1" default="$2" var_name="$3"
@@ -214,17 +241,39 @@ ask "Where to install rag-system?" "$HOME/rag-system" RAG_DIR
 ask "Where to store GGUF models?" "$HOME/models/GGUF/rag" GGUF_DIR
 ask "Where is your Python venv?" "$HOME/.venv/main" VENV_DIR
 ask "Where is your Obsidian vault directory?" "$HOME/obsidian" OBSIDIAN_DIR
+ask "Where is your documentation directory?" "$HOME/docs" DOCS_DIR
 
 # llama.cpp binary
 if check_command llama-server; then
     LLAMA_BIN=$(command -v llama-server)
     success "llama-server found: ${LLAMA_BIN}"
 else
-    ask "Path to llama-server binary?" "$HOME/llama.cpp/build/bin/llama-server" LLAMA_BIN
-    if [[ ! -f "$LLAMA_BIN" ]]; then
-        warn "llama-server not found at ${LLAMA_BIN}"
-        warn "You will need to compile llama.cpp before using the RAG"
-        warn "See: https://github.com/ggml-org/llama.cpp"
+    # Search common locations
+    LLAMA_CANDIDATES=(
+        "$HOME/llama.cpp/build/bin/llama-server"
+        "$HOME/llama-cpp-turboquant/build-cpu/bin/llama-server"
+        "$HOME/llama-cpp/build/bin/llama-server"
+        "$HOME/.local/bin/llama-server"
+        "/usr/local/bin/llama-server"
+        "/usr/bin/llama-server"
+    )
+    LLAMA_FOUND=""
+    for candidate in "${LLAMA_CANDIDATES[@]}"; do
+        if [[ -f "$candidate" ]]; then
+            LLAMA_FOUND="$candidate"
+            break
+        fi
+    done
+    if [[ -n "$LLAMA_FOUND" ]]; then
+        success "llama-server found: ${LLAMA_FOUND}"
+        LLAMA_BIN="$LLAMA_FOUND"
+    else
+        ask "Path to llama-server binary?" "$HOME/llama.cpp/build/bin/llama-server" LLAMA_BIN
+        if [[ ! -f "$LLAMA_BIN" ]]; then
+            warn "llama-server not found at ${LLAMA_BIN}"
+            warn "You will need to compile llama.cpp before using the RAG"
+            warn "See: https://github.com/ggml-org/llama.cpp"
+        fi
     fi
 fi
 
@@ -235,13 +284,13 @@ if [[ -d "$RAG_DIR" ]]; then
     warn "rag-system already exists at ${RAG_DIR}"
     ask_yes_no "Re-clone (will overwrite)?" "n" RECLONE
     if [[ "$RECLONE" == true ]]; then
-        rm -rf "$RAG_DIR"
+        run rm -rf "$RAG_DIR"
     fi
 fi
 
 if [[ ! -d "$RAG_DIR" ]]; then
     info "Cloning rag-system..."
-    git clone https://github.com/cried-nutty-won/rag-system.git "$RAG_DIR"
+    run git clone https://github.com/cried-nutty-won/rag-system.git "$RAG_DIR"
     success "rag-system cloned to ${RAG_DIR}"
 else
     success "rag-system already present at ${RAG_DIR}"
@@ -252,25 +301,25 @@ header "Step 4/10: Python environment"
 
 if [[ ! -d "$VENV_DIR" ]]; then
     info "Creating Python venv at ${VENV_DIR}..."
-    python3 -m venv "$VENV_DIR"
+    run python3 -m venv "$VENV_DIR"
     success "Venv created"
 else
     success "Venv already exists at ${VENV_DIR}"
 fi
 
 info "Installing Python dependencies (numpy, requests, rank_bm25)..."
-"${VENV_DIR}/bin/pip" install --quiet numpy requests rank_bm25
+run "${VENV_DIR}/bin/pip" install --quiet numpy requests rank_bm25
 success "Python dependencies installed"
 
 # ── Step 5: Download models ────────────────────────────────
 header "Step 5/10: Download models"
 
-mkdir -p "$GGUF_DIR"
+run mkdir -p "$GGUF_DIR"
 
 # Check huggingface-cli
 if ! check_command huggingface-cli; then
     warn "huggingface-cli not found. Installing..."
-    "${VENV_DIR}/bin/pip" install --quiet huggingface_hub[cli]
+    run "${VENV_DIR}/bin/pip" install --quiet huggingface_hub[cli]
     HF_CLI="${VENV_DIR}/bin/huggingface-cli"
 else
     HF_CLI="huggingface-cli"
@@ -281,7 +330,7 @@ if [[ -f "${GGUF_DIR}/${EMBED_FILE}" ]]; then
     success "Embedding model already present: ${EMBED_FILE}"
 else
     info "Downloading embedding model: ${EMBED_MODEL} (${EMBED_SIZE})..."
-    "$HF_CLI" download "$EMBED_HF" "$EMBED_FILE" --local-dir "$GGUF_DIR"
+    run "$HF_CLI" download "$EMBED_HF" "$EMBED_FILE" --local-dir "$GGUF_DIR"
     success "Embedding model downloaded"
 fi
 
@@ -291,7 +340,7 @@ if [[ -f "${GGUF_DIR}/${RERANK_FILE}" ]]; then
 else
     info "Downloading reranker model: ${RERANK_MODEL} (${RERANK_SIZE})..."
     info "Source: Voodisss (mandatory — community GGUFs are broken)"
-    "$HF_CLI" download "$RERANK_HF" "$RERANK_FILE" --local-dir "$GGUF_DIR"
+    run "$HF_CLI" download "$RERANK_HF" "$RERANK_FILE" --local-dir "$GGUF_DIR"
     success "Reranker model downloaded"
 fi
 
@@ -299,7 +348,10 @@ fi
 header "Step 6/10: Configure rag-system"
 
 # Write config.sh
-cat > "${RAG_DIR}/config.sh" << CONFIGEOF
+if [[ "$DRY_RUN" == true ]]; then
+    echo -e "  ${YELLOW}[DRY-RUN]${NC} Would write config to: ${RAG_DIR}/config.sh"
+else
+    cat > "${RAG_DIR}/config.sh" << CONFIGEOF
 # openfox-rag configuration
 # Generated by install.sh on $(date +%Y-%m-%d)
 
@@ -311,83 +363,114 @@ RAG_SCRIPTS_DIR="${RAG_DIR}/server"
 LLAMA_SCRIPTS_DIR="${RAG_DIR}/llama"
 LOG_DIR="/tmp"
 CONFIGEOF
+fi
 
 success "config.sh written"
 
 # Make scripts executable
-chmod +x "${RAG_DIR}/llama/"*.sh 2>/dev/null || true
-chmod +x "${RAG_DIR}/server/"*.py 2>/dev/null || true
-chmod +x "${RAG_DIR}/fish/"*.sh 2>/dev/null || true
+run chmod +x "${RAG_DIR}/llama/"*.sh 2>/dev/null || true
+run chmod +x "${RAG_DIR}/server/"*.py 2>/dev/null || true
+run chmod +x "${RAG_DIR}/fish/"*.sh 2>/dev/null || true
 success "Scripts made executable"
 
-# ── Step 7: Configure vaults ───────────────────────────────
+# ── Step 7/10: Configure vaults ───────────────────────────
 header "Step 7/10: Configure vaults"
 
-echo -e "${BOLD}Scanning for vaults in ${OBSIDIAN_DIR}...${NC}"
+echo -e "${BOLD}Add your knowledge base vaults one by one.${NC}"
+echo -e "  Press ${CYAN}Enter${NC} on an empty name to finish."
 echo ""
 
-VAULTS_FOUND=()
-if [[ -d "$OBSIDIAN_DIR" ]]; then
-    while IFS= read -r -d '' dir; do
-        VAULTS_FOUND+=("$dir")
-    done < <(find "$OBSIDIAN_DIR" -maxdepth 1 -mindepth 1 -type d -print0 | sort -z)
-fi
-
-if [[ ${#VAULTS_FOUND[@]} -gt 0 ]]; then
-    info "Found ${#VAULTS_FOUND[@]} potential vaults:"
-    echo ""
-    for i in "${!VAULTS_FOUND[@]}"; do
-        vault_name=$(basename "${VAULTS_FOUND[$i]}")
-        echo -e "  ${GREEN}$((i+1)))${NC} ${vault_name}"
-    done
-    echo ""
-    echo -e "  ${CYAN}a)${NC} All of the above"
-    echo -e "  ${CYAN}n)${NC} None (configure manually later)"
-    echo ""
-    read -rp "  Select vaults [a]: " vault_choice
-    vault_choice="${vault_choice:-a}"
-else
-    warn "No vaults found in ${OBSIDIAN_DIR}"
-    vault_choice="n"
-fi
-
-# Build VAULTS_CONFIG python snippet
 VAULTS_PYTHON=""
 VAULTS_REGEX=""
 VAULT_COUNT=0
 
-if [[ "$vault_choice" == "a" ]]; then
-    for dir in "${VAULTS_FOUND[@]}"; do
-        vault_name=$(basename "$dir" | sed 's/^[0-9]* *//;s/ *$//;s/ /_/g' | tr '[:upper:]' '[:lower:]')
-        VAULTS_PYTHON+="    \"${vault_name}\": {\"path\": os.path.join(OBSIDIAN_DIR, \"$(basename "$dir")\")},\n"
-        if [[ -n "$VAULTS_REGEX" ]]; then
-            VAULTS_REGEX+="|"
+while true; do
+    echo -e "${BOLD}Vault #$((VAULT_COUNT + 1))${NC}"
+    echo -e "  ${CYAN}Type:${NC} obsidian or docs"
+    read -rp "  Type [obsidian]: " vault_type
+    vault_type="${vault_type:-obsidian}"
+
+    if [[ "$vault_type" == "obsidian" ]]; then
+        default_path="${OBSIDIAN_DIR}"
+    else
+        default_path="${DOCS_DIR}"
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Scanning ${default_path} ...${NC}"
+
+    DIRS_FOUND=()
+    if [[ -d "$default_path" ]]; then
+        while IFS= read -r -d '' dir; do
+            DIRS_FOUND+=("$dir")
+        done < <(find "$default_path" -maxdepth 1 -mindepth 1 -type d ! -name '.*' -print0 | sort -z)
+    fi
+
+    if [[ ${#DIRS_FOUND[@]} -gt 0 ]]; then
+        echo ""
+        for i in "${!DIRS_FOUND[@]}"; do
+            echo -e "  ${GREEN}$((i+1)))${NC} $(basename "${DIRS_FOUND[$i]}")"
+        done
+        echo ""
+        echo -e "  Enter a ${CYAN}number${NC} to select, or a ${CYAN}custom path${NC}."
+        echo -e "  Press ${CYAN}Enter${NC} on empty to finish adding vaults."
+        read -rp "  > " vault_input
+    else
+        warn "No directories found in ${default_path}"
+        echo -e "  Enter a ${CYAN}custom path${NC}, or press ${CYAN}Enter${NC} to finish."
+        read -rp "  > " vault_input
+    fi
+
+    # Empty input = finish
+    if [[ -z "$vault_input" ]]; then
+        break
+    fi
+
+    # Resolve path
+    if [[ "$vault_input" =~ ^[0-9]+$ ]] && [[ ${#DIRS_FOUND[@]} -gt 0 ]]; then
+        idx=$((vault_input - 1))
+        if [[ $idx -ge 0 && $idx -lt ${#DIRS_FOUND[@]} ]]; then
+            vault_path="${DIRS_FOUND[$idx]}"
+        else
+            warn "Invalid number. Try again."
+            continue
         fi
-        VAULTS_REGEX+="${vault_name}"
-        VAULT_COUNT=$((VAULT_COUNT + 1))
-    done
-elif [[ "$vault_choice" =~ ^[0-9, ]+$ ]]; then
-    IFS=',' read -ra indices <<< "$vault_choice"
-    for idx in "${indices[@]}"; do
-        idx=$(echo "$idx" | tr -d ' ')
-        if [[ "$idx" -ge 1 && "$idx" -le ${#VAULTS_FOUND[@]} ]]; then
-            dir="${VAULTS_FOUND[$((idx-1))]}"
-            vault_name=$(basename "$dir" | sed 's/^[0-9]* *//;s/ *$//;s/ /_/g' | tr '[:upper:]' '[:lower:]')
-            VAULTS_PYTHON+="    \"${vault_name}\": {\"path\": os.path.join(OBSIDIAN_DIR, \"$(basename "$dir")\")},\n"
-            if [[ -n "$VAULTS_REGEX" ]]; then
-                VAULTS_REGEX+="|"
-            fi
-            VAULTS_REGEX+="${vault_name}"
-            VAULT_COUNT=$((VAULT_COUNT + 1))
-        fi
-    done
-fi
+    else
+        vault_path="$vault_input"
+    fi
+
+    if [[ ! -d "$vault_path" ]]; then
+        warn "Directory not found: ${vault_path}. Try again."
+        continue
+    fi
+
+    # Ask for vault name
+    default_name=$(basename "$vault_path" | sed 's/^[0-9]* *//;s/ *$//;s/ /_/g' | tr '[:upper:]' '[:lower:]')
+    read -rp "  Vault name [${default_name}]: " vault_name
+    vault_name="${vault_name:-$default_name}"
+
+    # Check for duplicates
+    if echo "$VAULTS_REGEX" | grep -qw "$vault_name"; then
+        warn "Vault '${vault_name}' already exists. Try another name."
+        continue
+    fi
+
+    # Add vault
+    VAULTS_PYTHON+="    \"${vault_name}\": {\"path\": \"${vault_path}\"},\n"
+    if [[ -n "$VAULTS_REGEX" ]]; then
+        VAULTS_REGEX+="|"
+    fi
+    VAULTS_REGEX+="${vault_name}"
+    VAULT_COUNT=$((VAULT_COUNT + 1))
+    success "Vault added: ${vault_name} → ${vault_path}"
+    echo ""
+done
 
 if [[ $VAULT_COUNT -eq 0 ]]; then
-    warn "No vaults selected. You will need to configure VAULTS_CONFIG manually."
+    warn "No vaults configured. You will need to configure VAULTS_CONFIG manually."
     warn "Edit: ${RAG_DIR}/server/rag_server_rerank.py"
 else
-    success "${VAULT_COUNT} vault(s) configured"
+    success "${VAULT_COUNT} vault(s) configured: ${VAULTS_REGEX}"
 fi
 
 # ── Step 8: Shell aliases ──────────────────────────────────
@@ -415,7 +498,11 @@ alias rsk='pkill -f rag_server_rerank'
 if grep -q "openfox-rag aliases" "$SHELL_CONFIG" 2>/dev/null; then
     warn "Aliases already present in ${SHELL_CONFIG} — skipping"
 else
-    echo "$ALIAS_BLOCK" >> "$SHELL_CONFIG"
+    if [[ "$DRY_RUN" == true ]]; then
+       echo -e "  ${YELLOW}[DRY-RUN]${NC} Would append aliases to: ${SHELL_CONFIG}"
+    else
+       echo "$ALIAS_BLOCK" >> "$SHELL_CONFIG"
+    fi
     success "Aliases added to ${SHELL_CONFIG}"
 fi
 
@@ -426,9 +513,11 @@ OPENFOX_SKILLS_DIR="$HOME/.config/openfox/skills"
 ask_yes_no "Install OpenFox skill (rag-search.md)?" "y" INSTALL_SKILL
 
 if [[ "$INSTALL_SKILL" == true ]]; then
-    mkdir -p "$OPENFOX_SKILLS_DIR"
-
-    cat > "${OPENFOX_SKILLS_DIR}/rag-search.md" << SKILLEOF
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "  ${YELLOW}[DRY-RUN]${NC} Would write skill to: ${OPENFOX_SKILLS_DIR}/rag-search.md"
+    else
+        mkdir -p "$OPENFOX_SKILLS_DIR"
+        cat > "${OPENFOX_SKILLS_DIR}/rag-search.md" << 'SKILLEOF'
 # RAG — Local Knowledge Base
 
 You have full control over a local RAG (Retrieval-Augmented Generation) system.
@@ -438,84 +527,84 @@ You can start it, search it, monitor it, and stop it — all from the terminal.
 
 | Command | Action |
 |---------|--------|
-| \`llmers\` | Start full stack (embedding + reranker + RAG server) |
-| \`llmes\` | Start embedding + RAG server (no reranker) |
-| \`llme\` | Start embedding only (port 8181) |
-| \`llmr\` | Start reranker only (port 8184) |
-| \`rs\` | Start Python RAG server only (port 8182) |
-| \`rst\` | Tail -f RAG server logs |
-| \`rag <vault> "<query>"\` | Search with RRF only (fast, ~20ms) |
-| \`ragr <vault> "<query>"\` | Search with RRF + reranker (precise, ~10-18s) |
-| \`rc\` | Health check all 3 services |
-| \`rsk\` | Kill the Python RAG server |
+| `llmers` | Start full stack (embedding + reranker + RAG server) |
+| `llmes` | Start embedding + RAG server (no reranker) |
+| `llme` | Start embedding only (port 8181) |
+| `llmr` | Start reranker only (port 8184) |
+| `rs` | Start Python RAG server only (port 8182) |
+| `rst` | Tail -f RAG server logs |
+| `rag <vault> "<query>"` | Search with RRF only (fast, ~20ms) |
+| `ragr <vault> "<query>"` | Search with RRF + reranker (precise, ~10-18s) |
+| `rc` | Health check all 3 services |
+| `rsk` | Kill the Python RAG server |
 
 ## Vaults
 
-${VAULTS_REGEX:-void, linux, obsidian, all}
+void · linux · browsing · terminal · llm · images · telephone · obsidian · all
 
-- \`obsidian\`: all Obsidian vaults
-- \`all\`: all vaults (Obsidian + external)
+- `obsidian`: all Obsidian vaults
+- `all`: all vaults (Obsidian + external)
 
 ## Workflow
 
 ### 1. Check if RAG is running
 
-\`\`\`bash
+```bash
 rc
-\`\`\`
+```
 
 If all 3 services are healthy, skip to step 3.
 
 ### 2. Start the RAG stack
 
-\`\`\`bash
+```bash
 llmers
-\`\`\`
+```
 
 Wait 5-10 seconds, then verify:
 
-\`\`\`bash
+```bash
 rc
-\`\`\`
+```
 
 ### 3. Search
 
 Fast search (RRF only, ~20ms):
 
-\`\`\`bash
+```bash
 rag void "nftables configuration"
-\`\`\`
+```
 
 Precise search (RRF + reranker, ~10-18s):
 
-\`\`\`bash
+```bash
 ragr void "nftables configuration"
-\`\`\`
+```
 
 ### 4. Read the results
 
 The output is JSON. Each result contains:
 
-- \`source\`: filename
-- \`path\`: full path
-- \`confidence\`: relevance score (0-100)
-- \`rerank_score\`: reranker score (0.0-1.0), if reranking was enabled
-- \`text\`: the relevant passage
+- `source`: filename
+- `path`: full path
+- `confidence`: relevance score (0-100)
+- `rerank_score`: reranker score (0.0-1.0), if reranking was enabled
+- `text`: the relevant passage
 
 Use the retrieved passages as context for your answer.
 Always cite the source file.
 
 ### 5. Monitor (if needed)
 
-\`\`\`bash
+```bash
 rst
-\`\`\`
+```
 
 ### 6. Stop (if needed)
 
-\`\`\`bash
+```bash
 rsk
-\`\`\`
+```
 
 ## When to use
 
@@ -534,14 +623,14 @@ rsk
 
 | Problem | Solution |
 |---------|----------|
-| \`rc\` shows services down | Run \`llmers\` and wait 10s |
+| `rc` shows services down | Run `llmers` and wait 10s |
 | Search returns no results | Try a different vault or broader query |
-| Reranker timeout | Use \`rag\` instead of \`ragr\` (RRF only) |
-| Port already in use | \`rsk\` then \`rs\`, or \`pkill -f llama-server\` then \`llmers\` |
-| Need to check logs | \`rst\` |
+| Reranker timeout | Use `rag` instead of `ragr` (RRF only) |
+| Port already in use | `rsk` then `rs`, or `pkill -f llama-server` then `llmers` |
+| Need to check logs | `rst` |
 SKILLEOF
-
-    success "OpenFox skill installed: ${OPENFOX_SKILLS_DIR}/rag-search.md"
+        success "OpenFox skill installed: ${OPENFOX_SKILLS_DIR}/rag-search.md"
+    fi
 else
     info "Skill installation skipped"
 fi
@@ -575,12 +664,16 @@ fi
 # Check models
 if [[ -f "${GGUF_DIR}/${EMBED_FILE}" ]]; then
     success "Embedding model: ${EMBED_FILE}"
+elif [[ "$DRY_RUN" == true ]]; then
+    echo -e "  ${YELLOW}[DRY-RUN]${NC} Embedding model: would be downloaded"
 else
     error "Embedding model: MISSING"
 fi
 
 if [[ -f "${GGUF_DIR}/${RERANK_FILE}" ]]; then
     success "Reranker model: ${RERANK_FILE}"
+elif [[ "$DRY_RUN" == true ]]; then
+    echo -e "  ${YELLOW}[DRY-RUN]${NC} Reranker model: would be downloaded"
 else
     error "Reranker model: MISSING"
 fi
@@ -607,8 +700,8 @@ echo -e "  ${GREEN}llme${NC}                Start embedding only (port 8181)"
 echo -e "  ${GREEN}llmr${NC}                Start reranker only (port 8184)"
 echo -e "  ${GREEN}rs${NC}                  Start RAG server only (port 8182)"
 echo -e "  ${GREEN}rst${NC}                 Tail -f RAG server logs"
-echo -e "  ${GREEN}rag${NC} <vault> \"<q>\"   Search RRF only (fast, ~20ms)"
-echo -e "  ${GREEN}ragr${NC} <vault> \"<q>\"  Search RRF + reranker (precise, ~10-18s)"
+echo -e "  ${GREEN}rag${NC} <vault> \"<q>\"   Fast search (~20ms)"
+echo -e "  ${GREEN}ragr${NC} <vault> \"<q>\"  Slow and precise search with reranker (~10-18s)"
 echo -e "  ${GREEN}rc${NC}                  Health check all 3 services"
 echo -e "  ${GREEN}rsk${NC}                 Kill the RAG server"
 echo ""
@@ -635,7 +728,32 @@ echo -e "  4. ${BOLD}Verify:${NC}"
 echo -e "     ${CYAN}rc${NC}"
 echo ""
 echo -e "  5. ${BOLD}Search:${NC}"
-echo -e "     ${CYAN}ragr obsidian \"your query\"${NC}"
+echo ""
+echo -e "     Fast search (~20ms):"
+if [[ -n "$VAULTS_REGEX" ]]; then
+    first_vault=$(echo "$VAULTS_REGEX" | cut -d'|' -f1)
+    echo -e "     ${CYAN}rag ${first_vault} \"your query\"${NC}"
+else
+    echo -e "     ${CYAN}rag obsidian \"your query\"${NC}"
+fi
+echo ""
+echo -e "     Slow and precise search with reranker (~10-18s):"
+if [[ -n "$VAULTS_REGEX" ]]; then
+    echo -e "     ${CYAN}ragr ${first_vault} \"your query\"${NC}"
+else
+    echo -e "     ${CYAN}ragr obsidian \"your query\"${NC}"
+fi
+echo ""
+echo -e "     Search a specific vault:"
+if [[ -n "$VAULTS_REGEX" ]]; then
+    echo -e "     ${CYAN}rag <vault_name> \"your query\"${NC}"
+    echo -e "     Available vaults: ${GREEN}${VAULTS_REGEX}${NC}"
+else
+    echo -e "     ${CYAN}rag <vault_name> \"your query\"${NC}"
+fi
+echo ""
+echo -e "     Search all vaults at once:"
+echo -e "     ${CYAN}ragr all \"your query\"${NC}"
 echo ""
 
 echo -e "${BOLD}${CYAN}━━━ Vaults ━━━${NC}"
