@@ -108,6 +108,31 @@ rag obsidian "ta requête"                  # recherche dans tous les vaults Obs
 - Embedding : [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) ou [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) (officiel)
 - Reranker : [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) ou [Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp) (**obligatoire** — les GGUF communautaires sont cassés, voir [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
 
+**MTEB** est le benchmark de référence pour évaluer la qualité des modèles d'embedding. Il mesure la capacité d'un modèle à produire des vecteurs qui capturent le sens du texte, à travers **8 types de tâches** :
+
+| Tâche | Ce que ça mesure | Exemple |
+|---|---|---|
+| **Retrieval** | Retrouver le bon document parmi des milliers | "Quelle est la procédure nftables ?" → trouver le bon fichier |
+| **Reranking** | Réordonner des candidats par pertinence | Classer 18 chunks du plus au moins pertinent |
+| **Classification** | Catégoriser un texte | "Ce document parle-t-il de réseau ou de stockage ?" |
+| **Clustering** | Regrouper des textes similaires | Regrouper les notes par thème |
+| **STS** (Semantic Textual Similarity) | Mesurer la similarité entre deux phrases | "nftables firewall" ≈ "pare-feu nftables" |
+| **Pair Classification** | Dire si deux textes sont liés | "Cette procédure correspond-elle à cette question ?" |
+| **Bitext Mining** | Trouver la traduction correspondante | FR ↔ EN |
+| **Summarization** | Évaluer la qualité d'un résumé | — |
+
+### Pourquoi c'est pertinent pour le RAG
+
+Le score MTEB **Retrieval** est le plus important pour le RAG : il mesure directement la capacité du modèle à retrouver le bon document. Plus le score est élevé, moins le RAG a besoin du reranker pour compenser.
+
+| Modèle | MTEB Multilingual | MTEB Retrieval | Dimensions |
+|---|---|---|---|
+| Qwen3-Embedding-0.6B | 64.33 | 64.64 | 1024 |
+| Qwen3-Embedding-4B | 69.45 | 69.60 | 2560 |
+| Qwen3-Embedding-8B | 70.58 | 70.88 | 4096 |
+
+Le 0.6B est suffisant pour un RAG local avec reranker. Le 4B apporte +5 points mais nécessite un GPU.
+
 ## Configuration du backend
 
 Les modèles d'embedding et de reranking peuvent être servis par le même backend que le LLM de chat, ou par des instances llama-server séparées. Voir [`presets/models-llamacpp.ini`](presets/models-llamacpp.ini) pour une configuration prête à l'emploi.
@@ -195,6 +220,31 @@ python -m sglang.launch_server \
   --model-path Qwen/Qwen3-Embedding-0.6B \
   --is-embedding --port 8000 &
 ```
+
+### ollama (embedding uniquement)
+
+Ollama ne supporte pas le reranking. Le serveur RAG bascule automatiquement en RRF pur (BM25 + vectoriel, sans reranker).
+
+```bash
+ollama pull qwen3-embedding:0.6b
+```
+
+```bash
+# Configuration du serveur RAG pour ollama
+export LLAMA_EMBED_URL="http://127.0.0.1:11434/api/embeddings"
+# Pas d'URL de reranker — basculement automatique en RRF
+```
+
+### Résumé de compatibilité des backends
+
+| Backend | Embedding | Reranking | Mode RAG |
+|---|---|---|---|
+| llamacpp | ✅ `POST /embedding` | ✅ `POST /v1/rerank` | Hybride + Reranker |
+| vLLM | ✅ `POST /v1/embeddings` | ✅ `POST /v1/rerank` | Hybride + Reranker |
+| sglang | ✅ `POST /v1/embeddings` | ✅ `POST /v1/rerank` | Hybride + Reranker |
+| ollama | ✅ `POST /api/embeddings` | ❌ | Hybride (RRF uniquement) |
+
+Le serveur RAG s'adapte automatiquement : si le reranker est injoignable, il bascule en RRF pur sans erreur.
 
 ## Intégration dans les workflows
 
