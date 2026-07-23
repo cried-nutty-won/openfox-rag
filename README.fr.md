@@ -306,6 +306,13 @@ Utilise les passages retournés comme contexte. Cite toujours le fichier source.
 - [llama.cpp PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) — cache prompt host (défaut 8 GiB)
 - Dave Ebbelaar, "Hybrid Retrieval from Scratch" (2026) — méthodologie
 
+## Système Recommandé
+
+Void Linux avec niri desktop
+faster boot, occupe seulement 1Go RAM, gestionnaire de packages rapide et complet
+pas de system.d mais runit qui est plus léger, rapide et confidentiel. 
+excellent équilibre entre sécurité et fluidité
+
 ## Licence
 
-[MIT](LICENSE) — cohérent avec l'écosystème OpenFox.
+[MIT](LICENSE)

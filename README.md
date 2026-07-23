@@ -304,6 +304,13 @@ Use the retrieved passages as context. Always cite the source file.
 - [llama.cpp PR #16391](https://github.com/ggml-org/llama.cpp/pull/16391) — host prompt cache (8 GiB default)
 - Dave Ebbelaar, "Hybrid Retrieval from Scratch" (2026) — methodology
 
+## Recommended System
+
+Void Linux with niri desktop
+faster boot, 1GB RAM occupied only, fastest and whole package manager
+system.d free, runit instead wich is faster, lighter and private. 
+perfect balance between security and fluidity
+
 ## License
 
-[MIT](LICENSE) — consistent with the OpenFox ecosystem.
+[MIT](LICENSE)
