@@ -4,7 +4,7 @@
 
 Intégration RAG pour [OpenFox](https://github.com/openfox/openfox). Un fichier skill qui apprend à l'agent OpenFox à rechercher dans une base de connaissances locale (vaults Obsidian, documentation technique, procédures) via un pipeline de retrieval hybride : **BM25 + Vectoriel → RRF → Reranker cross-encoder**.
 
-Pas de MCP, pas de plugin, pas de processus supplémentaire. Le serveur RAG tourne indépendamment ([rag-system](https://github.com/cried-nutty-won/rag-system)), et l'agent le contrôle entièrement via son terminal intégré avec 10 raccourcis fish.
+Pas de MCP, pas de plugin, pas de processus supplémentaire. Le serveur RAG tourne indépendamment ([rag-system](https://github.com/cried-nutty-won/rag-system)), et l'agent le contrôle entièrement via son terminal intégré avec 10 raccourcis shell.
 
 ## Pourquoi
 
@@ -24,8 +24,8 @@ Agent OpenFox
     │         │
     │         ├──→ rc          (health check)
     │         ├──→ llmers      (démarrer la stack complète)
-    │         ├──→ ragr void "requête"   (recherche avec reranker)
-    │         ├──→ rag void "requête"    (recherche RRF seule)
+    │         ├──→ ragr void "requête"   (recherche précise)
+    │         ├──→ rag void "requête"    (recherche rapide)
     │         ├──→ rst         (tail des logs)
     │         └──→ rsk         (arrêter le serveur)
     │
@@ -34,6 +34,33 @@ Agent OpenFox
 ```
 
 **Zéro processus supplémentaire côté OpenFox.** Le serveur RAG est un service séparé et indépendant. L'agent le démarre, le consulte, le surveille et l'arrête — tout depuis le terminal, exactement comme n'importe quel outil en ligne de commande.
+
+## Installation
+
+```bash
+git clone https://github.com/cried-nutty-won/openfox-rag.git
+cd openfox-rag
+bash install.sh
+```
+
+L'installateur :
+
+- Détecte l'OS, la RAM, le GPU (NVIDIA, Apple Silicon, lspci)
+- Détecte le shell (fish, bash, zsh, sh) et écrit les alias dans le bon fichier de config
+- Propose les modèles 0.6B (défaut) ou 4B (GPU uniquement — masqués sur CPU)
+- Télécharge les GGUF depuis Qwen officiel + Voodisss
+- Clone et configure [rag-system](https://github.com/cried-nutty-won/rag-system)
+- Scanne les vaults Obsidian et documentation (boucle interactive)
+- Installe le skill OpenFox (`~/.config/openfox/skills/rag-search.md`)
+- Affiche toutes les commandes et les chemins vers la doc à la fin
+
+### Mode dry-run
+
+Tester sans rien modifier :
+
+```bash
+bash install.sh --dry-run
+```
 
 ## Commandes
 
@@ -45,81 +72,23 @@ Agent OpenFox
 | `llmr` | Démarrer le reranker seul (port 8184) |
 | `rs` | Démarrer le serveur RAG Python seul (port 8182) |
 | `rst` | Tail -f des logs du serveur RAG |
-| `rag <vault> "<requête>"` | Recherche RRF seule (rapide, ~20ms) |
-| `ragr <vault> "<requête>"` | Recherche RRF + reranker (précis, ~10-18s) |
+| `rag <vault> "<requête>"` | Recherche rapide (~20ms) |
+| `ragr <vault> "<requête>"` | Recherche lente et précise avec reranker (~10-18s CPU, ~1s GPU) |
 | `rc` | Health check des 3 services |
 | `rsk` | Tuer le serveur RAG Python |
 
 ## Vaults
 
-`void` · `linux` · `browsing` · `terminal` · `llm` · `images` · `telephone` · `obsidian` · `all`
-
-- `obsidian` : tous les vaults Obsidian
-- `all` : tous les vaults (Obsidian + externes)
-
-## Installation
-
-### 1. Installer le serveur RAG
-
-Voir [rag-system](https://github.com/cried-nutty-won/rag-system) pour les instructions complètes.
+Configurés de manière interactive pendant l'installation. Chaque vault a un nom court utilisé dans les commandes :
 
 ```bash
-git clone https://github.com/cried-nutty-won/rag-system.git
-cd rag-system
-cp config.sh.example config.sh
-# Éditer config.sh avec vos chemins
+rag void "configuration nftables"         # recherche dans le vault "void"
+ragr linux "hooks dracut"                  # recherche précise dans "linux"
+ragr all "ta requête"                      # recherche dans tous les vaults
+rag obsidian "ta requête"                  # recherche dans tous les vaults Obsidian
 ```
 
-### 2. Ajouter le skill à OpenFox
-
-**Option A : General Instructions (le plus simple)**
-
-Dans OpenFox, aller dans Settings > General Instructions et ajouter :
-
-```
-Tu as accès à un système RAG local. Utilise ces commandes dans le terminal :
-
-| Commande | Action |
-|----------|--------|
-| llmers | Démarrer la stack complète (embedding + reranker + RAG) |
-| llmes | Démarrer embedding + RAG (sans reranker) |
-| llme | Démarrer l'embedding seul |
-| llmr | Démarrer le reranker seul |
-| rs | Démarrer le serveur RAG seul |
-| rst | Tail -f des logs RAG |
-| rag <vault> "<requête>" | Recherche RRF seule (rapide) |
-| ragr <vault> "<requête>" | Recherche RRF + reranker (précis) |
-| rc | Health check de tous les services |
-| rsk | Tuer le serveur RAG |
-
-Avant de coder, consulte toujours la base de connaissances :
-rc
-ragr obsidian "ta requête"
-```
-
-**Option B : Fichier skill**
-
-```bash
-cp skills/rag-search.md ~/.config/openfox/skills/
-```
-
-Puis dans OpenFox, aller dans Settings > Skills et pointer vers le dossier.
-
-**Option C : AGENTS.md (par projet)**
-
-Ajouter le tableau de commandes et les instructions de recherche dans le fichier `AGENTS.md` du projet.
-
-### 3. Aucun prérequis nécessaire
-
-L'agent contrôle l'intégralité de la stack RAG de manière autonome via le terminal.
-Il vérifie la santé (`rc`), démarre la stack (`llmers`), recherche (`rag`/`ragr`),
-surveille les logs (`rst`) et arrête les services (`rsk`) — tout seul.
-
-## Configuration du backend
-
-Les modèles d'embedding et de reranking peuvent être servis par le même backend que le LLM de chat, ou par des instances llama-server séparées. Voir [`presets/models-llamacpp.ini`](presets/models-llamacpp.ini) pour une configuration prête à l'emploi.
-
-### Sélection des modèles
+## Sélection des modèles
 
 | Matériel | Embedding | Reranker | Pourquoi |
 |----------|-----------|----------|----------|
@@ -138,6 +107,10 @@ Les modèles d'embedding et de reranking peuvent être servis par le même backe
 
 - Embedding : [Qwen/Qwen3-Embedding-0.6B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) ou [Qwen/Qwen3-Embedding-4B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF) (officiel)
 - Reranker : [Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp) ou [Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp](https://huggingface.co/Voodisss/Qwen3-Reranker-4B-GGUF-llama_cpp) (**obligatoire** — les GGUF communautaires sont cassés, voir [llama.cpp #16407](https://github.com/ggml-org/llama.cpp/issues/16407))
+
+## Configuration du backend
+
+Les modèles d'embedding et de reranking peuvent être servis par le même backend que le LLM de chat, ou par des instances llama-server séparées. Voir [`presets/models-llamacpp.ini`](presets/models-llamacpp.ini) pour une configuration prête à l'emploi.
 
 ### llamacpp (models.ini)
 
@@ -201,11 +174,9 @@ ctx-size = 32768
 llama-server --host 127.0.0.1 --port 8000 --models-max 1 --models-preset models.ini
 ```
 
-> **Note sur le pooling** : Le [blog officiel Qwen3](https://qwenlm.github.io/blog/qwen3-embedding/) dit `last` (hidden state du token [EOS] final) pour l'embedding. Le [guide Voodisss](https://gist.github.com/VooDisss/42bce4eb5c76d3c325633886c5e348ee) dit `mean`. La doc officielle fait foi : utiliser `last`.
+> **Note sur le pooling** : Le [blog officiel Qwen3](https://qwenlm.github.io/blog/qwen3-embedding/) dit `last` (hidden state du token [EOS] final) pour l'embedding. Certains guides communautaires disent `mean`. La doc officielle fait foi : utiliser `last`.
 
 ### vLLM (cluster GPU)
-
-#### Modèles 0.6B
 
 ```bash
 vllm serve Qwen/Qwen3-Embedding-0.6B \
@@ -214,18 +185,6 @@ vllm serve Qwen/Qwen3-Embedding-0.6B \
 
 vllm serve Qwen/Qwen3-Reranker-0.6B \
   --served-model-name Qwen3-Reranker-0.6B \
-  --task score --port 8001 &
-```
-
-#### Modèles 4B
-
-```bash
-vllm serve Qwen/Qwen3-Embedding-4B \
-  --served-model-name Qwen3-Embedding-4B \
-  --task embedding --port 8000 &
-
-vllm serve Qwen/Qwen3-Reranker-4B \
-  --served-model-name Qwen3-Reranker-4B \
   --task score --port 8001 &
 ```
 
@@ -260,8 +219,8 @@ Utilise les passages retournés comme contexte. Cite toujours le fichier source.
 
 ## Performance
 
-| Métrique | RRF seul | Avec Reranker (0.6B) | Avec Reranker (4B) |
-|----------|----------|---------------------|-------------------|
+| Métrique | Recherche rapide | Recherche précise (0.6B) | Recherche précise (4B) |
+|----------|-----------------|-------------------------|------------------------|
 | Latence (CPU) | ~20 ms | ~10-18 s (18 candidats) | ~30-40 s (trop lent) |
 | Latence (GPU) | ~3 ms | ~1 s (100 candidats) | ~3 s (100 candidats) |
 | RAM / VRAM | ~1.7 Go | ~1.7 Go | ~6 Go |
