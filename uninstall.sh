@@ -164,11 +164,13 @@ fi
 # ── Step 3: Remove OpenFox skill ───────────────────────────
 header "Step 3/6: Remove OpenFox skill"
 
-SKILL_FILE="${HOME}/.config/openfox/skills/rag-search.md"
+SKILL_FILE="${HOME}/.config/openfox/skills/rag-search.skill.md"
+LEGACY_SKILL="${HOME}/.config/openfox/skills/rag-search.md"
 if [[ -f "$SKILL_FILE" ]]; then
     ask_yes_no "Remove OpenFox skill?" "y" REMOVE_SKILL
     if [[ "$REMOVE_SKILL" == true ]]; then
         run rm -f "$SKILL_FILE"
+        run rm -f "$LEGACY_SKILL"
         success "Skill removed"
     fi
 else

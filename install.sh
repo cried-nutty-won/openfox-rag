@@ -537,7 +537,13 @@ if [[ "$INSTALL_SKILL" == true ]]; then
         echo -e "  ${YELLOW}[DRY-RUN]${NC} Would write skill to: ${OPENFOX_SKILLS_DIR}/rag-search.md"
     else
         mkdir -p "$OPENFOX_SKILLS_DIR"
-        cat > "${OPENFOX_SKILLS_DIR}/rag-search.md" << 'SKILLEOF'
+        cat > "${OPENFOX_SKILLS_DIR}/rag-search.skill.md" << 'SKILLEOF'
+---
+id: rag-search
+name: RAG Local Search
+description: "Search the user's local knowledge base (Obsidian vaults and docs) via hybrid retrieval plus reranker. Load when the user asks about their notes, documentation, procedures, or before writing system configuration like nftables, dracut, sfdisk."
+version: 1.0.0
+---
 # RAG — Local Knowledge Base
 
 You have full control over a local RAG (Retrieval-Augmented Generation) system.
@@ -649,7 +655,7 @@ rsk
 | Port already in use | `rsk` then `rs`, or `pkill -f llama-server` then `llmers` |
 | Need to check logs | `rst` |
 SKILLEOF
-        success "OpenFox skill installed: ${OPENFOX_SKILLS_DIR}/rag-search.md"
+        success "OpenFox skill installed: ${OPENFOX_SKILLS_DIR}/rag-search.skill.md"
     fi
 else
     info "Skill installation skipped"
