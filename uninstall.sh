@@ -85,7 +85,7 @@ echo -e "${NC}"
 echo -e "  This script will remove:"
 echo -e "    • Running RAG services"
 echo -e "    • Shell aliases (openfox-rag + rag-system)"
-echo -e "    • OpenFox skill (rag-search.md)"
+echo -e "    • OpenFox skill (rag-search.skill.md)"
 echo -e "    • rag-system repo, models, cache, venv"
 echo -e "    • openfox-rag repo"
 echo ""
@@ -166,7 +166,7 @@ header "Step 3/6: Remove OpenFox skill"
 
 SKILL_FILE="${HOME}/.config/openfox/skills/rag-search.skill.md"
 LEGACY_SKILL="${HOME}/.config/openfox/skills/rag-search.md"
-if [[ -f "$SKILL_FILE" ]]; then
+if [[ -f "$SKILL_FILE" || -f "$LEGACY_SKILL" ]]; then
     ask_yes_no "Remove OpenFox skill?" "y" REMOVE_SKILL
     if [[ "$REMOVE_SKILL" == true ]]; then
         run rm -f "$SKILL_FILE"

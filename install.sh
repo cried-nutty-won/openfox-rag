@@ -126,7 +126,7 @@ echo -e "  This script will install and configure:"
 echo -e "    • rag-system server (Python + llama.cpp)"
 echo -e "    • Qwen3 embedding + reranker models (GGUF)"
 echo -e "    • Shell aliases (10 shortcuts)"
-echo -e "    • OpenFox skill (rag-search.md)"
+echo -e "    • OpenFox skill (rag-search.skill.md)"
 echo ""
 
 # ── Check repo location ────────────────────────────────────
@@ -356,13 +356,11 @@ fi
 
 # Embedding
 echo "[INFO] Downloading embedding model..."
-$HF_CMD Qwen/Qwen3-Embedding-0.6B-GGUF \
-  Qwen3-Embedding-0.6B-Q8_0.gguf --local-dir "$GGUF_DIR"
+$HF_CMD "$EMBED_HF" "$EMBED_FILE" --local-dir "$GGUF_DIR"
 
 # Reranker
 echo "[INFO] Downloading reranker model..."
-$HF_CMD Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp \
-  Qwen3-Reranker-0.6B-Q4_K_M.gguf --local-dir "$GGUF_DIR"
+$HF_CMD "$RERANK_HF" "$RERANK_FILE" --local-dir "$GGUF_DIR"
 
 # ── Step 6: Configure rag-system ───────────────────────────
 header "Step 6/10: Configure rag-system"
@@ -530,11 +528,11 @@ fi
 header "Step 9/10: OpenFox skill"
 
 OPENFOX_SKILLS_DIR="$HOME/.config/openfox/skills"
-ask_yes_no "Install OpenFox skill (rag-search.md)?" "y" INSTALL_SKILL
+ask_yes_no "Install OpenFox skill (rag-search.skill.md)?" "y" INSTALL_SKILL
 
 if [[ "$INSTALL_SKILL" == true ]]; then
     if [[ "$DRY_RUN" == true ]]; then
-        echo -e "  ${YELLOW}[DRY-RUN]${NC} Would write skill to: ${OPENFOX_SKILLS_DIR}/rag-search.md"
+        echo -e "  ${YELLOW}[DRY-RUN]${NC} Would write skill to: ${OPENFOX_SKILLS_DIR}/rag-search.skill.md"
     else
         mkdir -p "$OPENFOX_SKILLS_DIR"
         cat > "${OPENFOX_SKILLS_DIR}/rag-search.skill.md" << 'SKILLEOF'
@@ -566,7 +564,7 @@ You can start it, search it, monitor it, and stop it — all from the terminal.
 
 ## Vaults
 
-void · linux · browsing · terminal · llm · images · telephone · obsidian · all
+__VAULTS_LIST__
 
 - `obsidian`: all Obsidian vaults
 - `all`: all vaults (Obsidian + external)
@@ -655,6 +653,15 @@ rsk
 | Port already in use | `rsk` then `rs`, or `pkill -f llama-server` then `llmers` |
 | Need to check logs | `rst` |
 SKILLEOF
+        # Injecter la liste dynamique des vaults configurés
+        if [[ -n "$VAULTS_REGEX" ]]; then
+            VAULTS_DISPLAY="${VAULTS_REGEX//|/ · } · obsidian · all"
+        else
+            VAULTS_DISPLAY="obsidian · all"
+        fi
+        SKILL_CONTENT=$(cat "${OPENFOX_SKILLS_DIR}/rag-search.skill.md")
+        SKILL_CONTENT="${SKILL_CONTENT//__VAULTS_LIST__/${VAULTS_DISPLAY}}"
+        printf '%s\n' "$SKILL_CONTENT" > "${OPENFOX_SKILLS_DIR}/rag-search.skill.md"
         success "OpenFox skill installed: ${OPENFOX_SKILLS_DIR}/rag-search.skill.md"
     fi
 else
@@ -675,7 +682,7 @@ echo -e "  Obsidian:       ${GREEN}${OBSIDIAN_DIR}${NC}"
 echo -e "  Vaults:         ${VAULT_COUNT} configured"
 echo -e "  Shell:          ${GREEN}${SHELL_NAME}${NC} → ${SHELL_CONFIG}"
 if [[ "$INSTALL_SKILL" == true ]]; then
-echo -e "  OpenFox skill:  ${GREEN}${OPENFOX_SKILLS_DIR}/rag-search.md${NC}"
+echo -e "  OpenFox skill:  ${GREEN}${OPENFOX_SKILLS_DIR}/rag-search.skill.md${NC}"
 fi
 echo ""
 
@@ -798,7 +805,7 @@ echo -e "  RAG server docs:     ${CYAN}${RAG_DIR}/doc/${NC}"
 echo -e "  RAG quick start:     ${CYAN}${RAG_DIR}/doc/00 Quick Start Guide.md${NC}"
 echo -e "  RAG full doc:        ${CYAN}${RAG_DIR}/doc/01 Full Documentation.md${NC}"
 echo -e "  OpenFox integration: ${CYAN}$(cd "$(dirname "$0")" && pwd)/doc/integration.md${NC}"
-echo -e "  OpenFox skill:       ${CYAN}${OPENFOX_SKILLS_DIR}/rag-search.md${NC}"
+echo -e "  OpenFox skill:       ${CYAN}${OPENFOX_SKILLS_DIR}/rag-search.skill.md${NC}"
 echo -e "  models.ini preset:   ${CYAN}$(cd "$(dirname "$0")" && pwd)/presets/models-llamacpp.ini${NC}"
 echo ""
 
