@@ -596,13 +596,13 @@ rc
 Fast search (RRF only, ~20ms):
 
 ```bash
-rag void "nftables configuration"
+rag __FIRST_VAULT__ "nftables configuration"
 ```
 
 Precise search (RRF + reranker, ~10-18s):
 
 ```bash
-ragr void "nftables configuration"
+ragr __FIRST_VAULT__ "nftables configuration"
 ```
 
 ### 4. Read the results
@@ -656,11 +656,14 @@ SKILLEOF
         # Injecter la liste dynamique des vaults configurés
         if [[ -n "$VAULTS_REGEX" ]]; then
             VAULTS_DISPLAY="${VAULTS_REGEX//|/ · } · obsidian · all"
+            FIRST_VAULT="${VAULTS_REGEX%%|*}"
         else
             VAULTS_DISPLAY="obsidian · all"
+            FIRST_VAULT="obsidian"
         fi
         SKILL_CONTENT=$(cat "${OPENFOX_SKILLS_DIR}/rag-search.skill.md")
         SKILL_CONTENT="${SKILL_CONTENT//__VAULTS_LIST__/${VAULTS_DISPLAY}}"
+        SKILL_CONTENT="${SKILL_CONTENT//__FIRST_VAULT__/${FIRST_VAULT}}"
         printf '%s\n' "$SKILL_CONTENT" > "${OPENFOX_SKILLS_DIR}/rag-search.skill.md"
         success "OpenFox skill installed: ${OPENFOX_SKILLS_DIR}/rag-search.skill.md"
     fi
