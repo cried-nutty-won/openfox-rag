@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# openfox-rag — Uninstaller
-# Removes aliases, OpenFox skill, and optionally the repo
+# openfox-rag — Uninstaller (full cleanup: openfox-rag + rag-system)
 # Usage: bash uninstall.sh [--dry-run]
 
 set -euo pipefail
 
-# ── Colors ──────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -20,7 +18,6 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 header()  { echo -e "\n${BOLD}${CYAN}━━━ $* ━━━${NC}\n"; }
 
-# ── Dry-run mode ────────────────────────────────────────────
 DRY_RUN=false
 for arg in "$@"; do
     case "$arg" in
@@ -48,7 +45,6 @@ ask_yes_no() {
     fi
 }
 
-# ── Shell detection ─────────────────────────────────────────
 detect_shell() {
     local shell_name
     shell_name="$(basename "${SHELL:-/bin/bash}")"
@@ -83,100 +79,176 @@ clear
 echo -e "${BOLD}${CYAN}"
 echo "  ╔══════════════════════════════════════════════════╗"
 echo "  ║        openfox-rag — Uninstaller                ║"
+echo "  ║   Removes openfox-rag + rag-system entirely     ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo -e "  This script will remove:"
-echo -e "    • Shell aliases (10 shortcuts)"
+echo -e "    • Running RAG services"
+echo -e "    • Shell aliases (openfox-rag + rag-system)"
 echo -e "    • OpenFox skill (rag-search.md)"
-echo -e "    • Optionally: the openfox-rag repo"
+echo -e "    • rag-system repo, models, cache, venv"
+echo -e "    • openfox-rag repo"
 echo ""
 echo -e "  ${YELLOW}It will NOT remove:${NC}"
-echo -e "    • rag-system (separate repo)"
 echo -e "    • Your Obsidian vaults or documentation"
-echo -e "    • GGUF models"
 echo ""
 
 detect_shell
 info "Shell: ${SHELL_NAME} → ${SHELL_CONFIG}"
 
-# ── Step 1: Remove shell aliases ───────────────────────────
-header "Step 1/3: Remove shell aliases"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if grep -q "openfox-rag aliases" "$SHELL_CONFIG" 2>/dev/null; then
-    ask_yes_no "Remove openfox-rag aliases from ${SHELL_CONFIG}?" "y" REMOVE_ALIASES
-    if [[ "$REMOVE_ALIASES" == true ]]; then
-        if [[ "$DRY_RUN" == true ]]; then
-            echo -e "  ${YELLOW}[DRY-RUN]${NC} Would remove alias block from ${SHELL_CONFIG}"
-        else
-            # Remove the block between the markers
-            sed -i '/# ── openfox-rag aliases ──/,/# ── end openfox-rag aliases ──/d' "$SHELL_CONFIG"
-            # Clean up leftover blank lines
-            sed -i '/^$/N;/^\n$/d' "$SHELL_CONFIG"
-        fi
-        success "Aliases removed from ${SHELL_CONFIG}"
-    else
-        info "Aliases kept"
-    fi
-else
-    info "No openfox-rag aliases found in ${SHELL_CONFIG}"
+# Detect rag-system location
+RAG_DIR=""
+if [[ -f "${HOME}/rag-system/config.sh" ]]; then
+    RAG_DIR="${HOME}/rag-system"
+elif [[ -f "${SCRIPT_DIR}/../rag-system/config.sh" ]]; then
+    RAG_DIR="$(cd "${SCRIPT_DIR}/../rag-system" && pwd)"
 fi
 
-# ── Step 2: Remove OpenFox skill ───────────────────────────
-header "Step 2/3: Remove OpenFox skill"
+# Load rag-system config if found
+GGUF_DIR="${HOME}/models/GGUF/rag"
+VENV_DIR="${HOME}/.venv/main"
+CACHE_DIR="${HOME}/.rag"
+if [[ -n "$RAG_DIR" && -f "${RAG_DIR}/config.sh" ]]; then
+    source "${RAG_DIR}/config.sh" 2>/dev/null || true
+fi
+
+# ── Step 1: Stop services ──────────────────────────────────
+header "Step 1/6: Stop RAG services"
+
+if pgrep -f "rag_server_rerank" &>/dev/null || \
+   pgrep -f "llama-server.*8181" &>/dev/null || \
+   pgrep -f "llama-server.*8184" &>/dev/null; then
+    info "Running services detected"
+    ask_yes_no "Stop all RAG services?" "y" STOP_SERVICES
+    if [[ "$STOP_SERVICES" == true ]]; then
+        run pkill -f "rag_server_rerank" 2>/dev/null || true
+        run pkill -f "llama-server.*8181" 2>/dev/null || true
+        run pkill -f "llama-server.*8184" 2>/dev/null || true
+        run pkill -f "Qwen3-Embedding" 2>/dev/null || true
+        run pkill -f "Qwen3-Reranker" 2>/dev/null || true
+        success "Services stopped"
+    fi
+else
+    success "No RAG services running"
+fi
+
+# ── Step 2: Remove aliases ─────────────────────────────────
+header "Step 2/6: Remove shell aliases"
+
+ALIASES_REMOVED=false
+if grep -q "openfox-rag aliases" "$SHELL_CONFIG" 2>/dev/null; then
+    ask_yes_no "Remove openfox-rag aliases from ${SHELL_CONFIG}?" "y" RM1
+    if [[ "$RM1" == true ]]; then
+        run sed -i '/# ── openfox-rag aliases ──/,/# ── end openfox-rag aliases ──/d' "$SHELL_CONFIG"
+        ALIASES_REMOVED=true
+    fi
+fi
+if grep -q "rag-system aliases" "$SHELL_CONFIG" 2>/dev/null; then
+    ask_yes_no "Remove rag-system aliases from ${SHELL_CONFIG}?" "y" RM2
+    if [[ "$RM2" == true ]]; then
+        run sed -i '/# ── rag-system aliases ──/,/# ── end rag-system aliases ──/d' "$SHELL_CONFIG"
+        ALIASES_REMOVED=true
+    fi
+fi
+if [[ "$ALIASES_REMOVED" == true ]]; then
+    run sed -i '/^$/N;/^\n$/d' "$SHELL_CONFIG"
+    success "Aliases removed"
+else
+    info "No aliases found or kept"
+fi
+
+# ── Step 3: Remove OpenFox skill ───────────────────────────
+header "Step 3/6: Remove OpenFox skill"
 
 SKILL_FILE="${HOME}/.config/openfox/skills/rag-search.md"
-
 if [[ -f "$SKILL_FILE" ]]; then
-    ask_yes_no "Remove OpenFox skill (${SKILL_FILE})?" "y" REMOVE_SKILL
+    ask_yes_no "Remove OpenFox skill?" "y" REMOVE_SKILL
     if [[ "$REMOVE_SKILL" == true ]]; then
         run rm -f "$SKILL_FILE"
         success "Skill removed"
-    else
-        info "Skill kept"
     fi
 else
-    info "No OpenFox skill found at ${SKILL_FILE}"
+    info "No OpenFox skill found"
 fi
 
-# ── Step 3: Remove repo (optional) ─────────────────────────
-header "Step 3/3: Remove openfox-rag repo (optional)"
+# ── Step 4: Remove rag-system data ─────────────────────────
+header "Step 4/6: Remove rag-system (repo, models, cache, venv)"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Cache
+if [[ -d "$CACHE_DIR" ]]; then
+    CACHE_SIZE=$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1)
+    info "Embedding cache: ${CACHE_DIR} (${CACHE_SIZE})"
+    ask_yes_no "Remove embedding cache?" "y" REMOVE_CACHE
+    if [[ "$REMOVE_CACHE" == true ]]; then
+        run rm -rf "$CACHE_DIR"
+        success "Cache removed"
+    fi
+fi
 
-ask_yes_no "Remove the openfox-rag repo (${SCRIPT_DIR})?" "n" REMOVE_REPO
+# Models
+if [[ -d "$GGUF_DIR" ]]; then
+    MODEL_SIZE=$(du -sh "$GGUF_DIR" 2>/dev/null | cut -f1)
+    info "GGUF models: ${GGUF_DIR} (${MODEL_SIZE})"
+    ask_yes_no "Remove GGUF models?" "y" REMOVE_MODELS
+    if [[ "$REMOVE_MODELS" == true ]]; then
+        run rm -rf "$GGUF_DIR"
+        success "Models removed"
+    fi
+fi
+
+# Venv
+if [[ -d "$VENV_DIR" ]]; then
+    VENV_SIZE=$(du -sh "$VENV_DIR" 2>/dev/null | cut -f1)
+    info "Python venv: ${VENV_DIR} (${VENV_SIZE})"
+    ask_yes_no "Remove Python venv?" "y" REMOVE_VENV
+    if [[ "$REMOVE_VENV" == true ]]; then
+        run rm -rf "$VENV_DIR"
+        # Clean activate line from shell config
+        if [[ -f "$SHELL_CONFIG" ]]; then
+            run sed -i "\|${VENV_DIR}/bin/activate|d" "$SHELL_CONFIG"
+        fi
+        success "Venv removed (+ activate line cleaned from ${SHELL_CONFIG})"
+    fi
+fi
+
+# rag-system repo
+if [[ -n "$RAG_DIR" && -d "$RAG_DIR" ]]; then
+    info "rag-system repo: ${RAG_DIR}"
+    ask_yes_no "Remove rag-system repo?" "y" REMOVE_RAG
+    if [[ "$REMOVE_RAG" == true ]]; then
+        run rm -rf "$RAG_DIR"
+        success "rag-system removed"
+    fi
+else
+    info "rag-system repo not found"
+fi
+
+# ── Step 5: Remove openfox-rag repo ────────────────────────
+header "Step 5/6: Remove openfox-rag repo"
+
+ask_yes_no "Remove openfox-rag repo (${SCRIPT_DIR})?" "y" REMOVE_REPO
 if [[ "$REMOVE_REPO" == true ]]; then
     run rm -rf "$SCRIPT_DIR"
-    success "Repo removed"
-else
-    info "Repo kept"
+    success "openfox-rag removed"
 fi
 
-# ── Summary ─────────────────────────────────────────────────
-header "Uninstall complete"
+# ── Step 6: Summary ────────────────────────────────────────
+header "Step 6/6: Done"
 
-echo -e "${BOLD}What was removed:${NC}"
-if [[ "${REMOVE_ALIASES:-false}" == true ]]; then
-    echo -e "  ${GREEN}✓${NC} Shell aliases (${SHELL_CONFIG})"
-else
-    echo -e "  ${YELLOW}–${NC} Shell aliases (kept)"
-fi
-if [[ "${REMOVE_SKILL:-false}" == true ]]; then
-    echo -e "  ${GREEN}✓${NC} OpenFox skill (rag-search.md)"
-else
-    echo -e "  ${YELLOW}–${NC} OpenFox skill (kept)"
-fi
-if [[ "${REMOVE_REPO:-false}" == true ]]; then
-    echo -e "  ${GREEN}✓${NC} openfox-rag repo"
-else
-    echo -e "  ${YELLOW}–${NC} openfox-rag repo (kept)"
-fi
+echo -e "${BOLD}Removed:${NC}"
+[[ "${STOP_SERVICES:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} RAG services"
+[[ "${ALIASES_REMOVED:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} Shell aliases"
+[[ "${REMOVE_SKILL:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} OpenFox skill"
+[[ "${REMOVE_CACHE:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} Embedding cache"
+[[ "${REMOVE_MODELS:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} GGUF models"
+[[ "${REMOVE_VENV:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} Python venv"
+[[ "${REMOVE_RAG:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} rag-system repo"
+[[ "${REMOVE_REPO:-false}" == true ]] && echo -e "  ${GREEN}✓${NC} openfox-rag repo"
 echo ""
-echo -e "${BOLD}What was NOT removed:${NC}"
-echo -e "  ${CYAN}•${NC} rag-system (separate repo)"
-echo -e "  ${CYAN}•${NC} GGUF models"
+echo -e "${BOLD}Not removed:${NC}"
 echo -e "  ${CYAN}•${NC} Obsidian vaults and documentation"
-echo -e "  ${CYAN}•${NC} Embedding cache (~/.rag/)"
 echo ""
-echo -e "${BOLD}To fully remove the RAG system, run:${NC}"
-echo -e "  ${CYAN}cd /path/to/rag-system && bash uninstall.sh${NC}"
+echo -e "${BOLD}Reload shell:${NC} ${CYAN}source ${SHELL_CONFIG}${NC}"
 echo ""
