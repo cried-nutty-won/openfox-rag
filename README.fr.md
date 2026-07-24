@@ -44,8 +44,9 @@ Agent OpenFox
 ## Installation
 
 ```bash
-git clone https://github.com/cried-nutty-won/openfox-rag.git
-cd openfox-rag
+mkdir -p ~/rag
+git clone https://github.com/cried-nutty-won/openfox-rag.git ~/rag/openfox-rag
+cd ~/rag/openfox-rag
 bash install.sh
 ```
 

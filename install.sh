@@ -129,6 +129,21 @@ echo -e "    • Shell aliases (10 shortcuts)"
 echo -e "    • OpenFox skill (rag-search.md)"
 echo ""
 
+# ── Check repo location ────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXPECTED_DIR="${HOME}/rag/openfox-rag"
+if [[ "$SCRIPT_DIR" != "$EXPECTED_DIR" ]]; then
+    warn "openfox-rag is at: ${SCRIPT_DIR}"
+    warn "Expected location:  ${EXPECTED_DIR}"
+    ask_yes_no "Move to ${EXPECTED_DIR}?" "y" MOVE_REPO
+    if [[ "$MOVE_REPO" == true ]]; then
+        run mkdir -p "${HOME}/rag"
+        run mv "$SCRIPT_DIR" "$EXPECTED_DIR"
+        success "Moved to ${EXPECTED_DIR}"
+        exec "${EXPECTED_DIR}/install.sh" "$@"
+    fi
+fi
+
 # ── Step 1: System detection ───────────────────────────────
 header "Step 1/10: System detection"
 
