@@ -39,6 +39,7 @@ Agent OpenFox
 **Zéro processus supplémentaire côté OpenFox.** Le serveur RAG est un service séparé et indépendant. L'agent le démarre, le consulte, le surveille et l'arrête — tout depuis le terminal, exactement comme n'importe quel outil en ligne de commande.
 
 ---
+---
 
 ## Installation
 
