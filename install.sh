@@ -230,15 +230,16 @@ header "Step 2/10: Installation paths"
 
 echo -e "${BOLD}Proposed directory structure:${NC}"
 echo ""
-echo -e "  ${CYAN}~/rag-system/${NC}              RAG server (Python + scripts)"
-echo -e "  ${CYAN}~/models/GGUF/rag/${NC}        GGUF models (${EMBED_SIZE} + ${RERANK_SIZE})"
+echo -e "  ${CYAN}~/rag/rag-system/${NC}         RAG server (Python + scripts)"
+echo -e "  ${CYAN}~/rag/openfox-rag/${NC}        OpenFox integration (this repo)"
+echo -e "  ${CYAN}~/rag/models/GGUF/${NC}        GGUF models (${EMBED_SIZE} + ${RERANK_SIZE})"
 echo -e "  ${CYAN}~/.venv/main/${NC}             Python virtual environment"
 echo -e "  ${CYAN}~/.rag/${NC}                   Embedding cache"
 echo -e "  ${CYAN}~/.config/openfox/skills/${NC}  OpenFox skill file"
 echo ""
 
-ask "Where to install rag-system?" "$HOME/rag-system" RAG_DIR
-ask "Where to store GGUF models?" "$HOME/models/GGUF/rag" GGUF_DIR
+ask "Where to install rag-system?" "$HOME/rag/rag-system" RAG_DIR
+ask "Where to store GGUF models?" "$HOME/rag/models/GGUF" GGUF_DIR
 ask "Where is your Python venv?" "$HOME/.venv/main" VENV_DIR
 ask "Where is your Obsidian vault directory?" "$HOME/obsidian" OBSIDIAN_DIR
 ask "Where is your documentation directory?" "$HOME/docs" DOCS_DIR
@@ -290,6 +291,7 @@ fi
 
 if [[ ! -d "$RAG_DIR" ]]; then
     info "Cloning rag-system..."
+    run mkdir -p "$(dirname "$RAG_DIR")"
     run git clone https://github.com/cried-nutty-won/rag-system.git "$RAG_DIR"
     success "rag-system cloned to ${RAG_DIR}"
 else

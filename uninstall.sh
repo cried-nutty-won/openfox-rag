@@ -100,14 +100,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Detect rag-system location
 RAG_DIR=""
-if [[ -f "${HOME}/rag-system/config.sh" ]]; then
+if [[ -f "${HOME}/rag/rag-system/config.sh" ]]; then
+    RAG_DIR="${HOME}/rag/rag-system"
+elif [[ -f "${HOME}/rag-system/config.sh" ]]; then
     RAG_DIR="${HOME}/rag-system"
 elif [[ -f "${SCRIPT_DIR}/../rag-system/config.sh" ]]; then
     RAG_DIR="$(cd "${SCRIPT_DIR}/../rag-system" && pwd)"
 fi
 
 # Load rag-system config if found
-GGUF_DIR="${HOME}/models/GGUF/rag"
+GGUF_DIR="${HOME}/rag/models/GGUF"
 VENV_DIR="${HOME}/.venv/main"
 CACHE_DIR="${HOME}/.rag"
 if [[ -n "$RAG_DIR" && -f "${RAG_DIR}/config.sh" ]]; then
