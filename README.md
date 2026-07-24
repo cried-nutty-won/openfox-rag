@@ -1,4 +1,4 @@
-# openfox-rag   [(fr)](README.fr.md)
+# openfox-rag   [→ fr](README.fr.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
